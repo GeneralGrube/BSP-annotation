@@ -223,7 +223,7 @@ if uploaded_file is not None:
         st.session_state["view_ts"] = None
 
     # Plot Header
-    st.subheader(f"""{uploaded_file.name.split(".")[0]}: Plotted {strip_len}s window ({st.session_state["bucket_idx"]+1}/{len(bins)})""")
+    st.subheader(f"""{uploaded_file.name.split('.')[0]}: Plotted {strip_len}s window ({st.session_state["bucket_idx"]+1}/{len(bins)})""")
     if st.session_state["max_bucket"] == False:
         st.write(f"""from {bins_dt[st.session_state["bucket_idx"]].strftime("%H:%M:%S")} to {bins_dt[st.session_state["bucket_idx"]+1].strftime("%H:%M:%S")}""")
     else:
@@ -260,7 +260,7 @@ if uploaded_file is not None:
             st.write(st.session_state["annot_df"])
         with col2:
             st.download_button("Download annotations", data=st.session_state["annot_df"].to_csv(), 
-                           file_name=f"{uploaded_file.name.split(".")[0]}_annot_{neurologist}.csv", use_container_width=True)
+                           file_name=f"{uploaded_file.name.split('.')[0]}_annot_{neurologist}.csv", use_container_width=True)
 
     #if st.checkbox("Show bins"):
     #    st.write(bins)
