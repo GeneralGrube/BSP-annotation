@@ -94,7 +94,7 @@ def get_annot():
         return st.session_state["annot_select"]
 
 def build_plot(data, bins, bins_dt):
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=True)
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0)
     lower_end = bins[st.session_state["bucket_idx"]]  - pd.to_timedelta(1, unit='s')
     if st.session_state["max_bucket"] == False:
         higher_end = bins[(st.session_state["bucket_idx"]+1)] + pd.to_timedelta(1, unit='s')
@@ -132,7 +132,7 @@ def build_plot(data, bins, bins_dt):
         if (annot >= low) & (annot <= high):
             fig.add_vline(x=annot)
 
-    fig.update_layout(showlegend=False, yaxis_range=[-200,200], yaxis2_range=[-200,200])
+    fig.update_layout(height=height_slider, showlegend=False, yaxis_range=[-200,200], yaxis2_range=[-200,200])
     #fig.update_layout(hovermode=False)
     fig["layout"]["yaxis"]["title"] = "EEG1"
     fig["layout"]["yaxis2"]["title"] = "EEG2"
@@ -201,7 +201,8 @@ with st.expander("Setup"):
     col1, col2 = st.columns(2)
     with col1:
         neurologist = st.radio("Select annotating neurologist:", ["VM", "JD"], key="neurologist")
-        strip_len = st.number_input("Select length of EEG plot in s:", min_value=5, max_value=60, value=30, step=1, on_change=slider_change)
+        strip_len = st.slider("Select length of EEG plot in s:", min_value=5, max_value=60, value=30, step=1, on_change=slider_change)
+        height_slider = st.slider("Select height of EEG Plot:", 250, 900, 450, 10)
     with col2:
         uploaded_file = st.file_uploader("Choose a EEG recording file", key="uploader", on_change=new_upload)
 
@@ -234,7 +235,7 @@ if uploaded_file is not None:
 
     fig = build_plot(data, bins, bins_dt)
 
-    clickedPoint = plotly_events(fig, click_event=True)
+    clickedPoint = plotly_events(fig, click_event=True, override_height=height_slider)
 
     col1, col2, col3 = st.columns(3)
     with col1:
