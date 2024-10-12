@@ -12,23 +12,27 @@ from datetime import timedelta
 
 st.set_page_config(layout="wide")
 
-
-st.title('Burst Suppression Annotation Program')
-
-if "bucket_idx" not in st.session_state:
-    st.session_state["bucket_idx"] = 0
-if "max_bucket" not in st.session_state:
-    st.session_state["max_bucket"] = False
-if "bucket_cnt" not in st.session_state:
-    st.session_state["bucket_cnt"] = False
-if "annot_df" not in st.session_state:
-    st.session_state["annot_df"] = pd.DataFrame(data=None, columns=["begin_idx", "end_idx", "annot_id", "annot_txt", "neurologist"])
-if "timestamp1" not in st.session_state: #temporäre Variablen, um den Zustand der aktuellen Annotation zu tracken.
-    st.session_state["timestamp1"] = None
-if "timestamp2" not in st.session_state:
-    st.session_state["timestamp2"] = None
-if "view_ts" not in st.session_state:
-    st.session_state["view_ts"] = None
+if "bucket_idx" not in ss:
+    ss["bucket_idx"] = 0
+if "max_bucket" not in ss:
+    ss["max_bucket"] = False
+if "bucket_cnt" not in ss:
+    ss["bucket_cnt"] = False
+if "annot_df" not in ss:
+    ss["annot_df"] = pd.DataFrame(data=None, columns=["begin_idx", "end_idx", "annot_id", "annot_txt", "neurologist"])
+if "timestamp1" not in ss: #temporäre Variablen, um den Zustand der aktuellen Annotation zu tracken.
+    ss["timestamp1"] = None
+if "timestamp2" not in ss:
+    ss["timestamp2"] = None
+if "view_ts" not in ss:
+    ss["view_ts"] = None
+if "setup_dict" not in ss:
+    ss["setup_dict"] = {
+        "strip_len": 30,
+        "plot_height": 450,
+        "y_range": 200,
+        "smooth": 1
+    }
 
 @st.cache_data
 def generate_random_dataset(n):
@@ -98,12 +102,12 @@ def build_plot(data, bins, bins_dt):
     lower_end = bins[st.session_state["bucket_idx"]]  - pd.to_timedelta(1, unit='s')
     if st.session_state["max_bucket"] == False:
         higher_end = bins[(st.session_state["bucket_idx"]+1)] + pd.to_timedelta(1, unit='s')
-        fig.add_trace(go.Scatter(x=data[lower_end:higher_end].index, y=data[lower_end:higher_end]["EEG1"], mode="lines", marker=dict(color='#1f77b4')), row=1, col=1)
-        fig.add_trace(go.Scatter(x=data[lower_end:higher_end].index, y=data[lower_end:higher_end]["EEG2"], mode="lines", marker=dict(color='#2ca02c')), row=2, col=1)
+        fig.add_trace(go.Scatter(x=data[lower_end:higher_end].index, y=data[lower_end:higher_end]["EEG1"].rolling(ss["setup_dict"]["smooth"]).mean().bfill(), mode="lines", marker=dict(color='#1f77b4')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=data[lower_end:higher_end].index, y=data[lower_end:higher_end]["EEG2"].rolling(ss["setup_dict"]["smooth"]).mean().bfill(), mode="lines", marker=dict(color='#2ca02c')), row=2, col=1)
 
     else:
-        fig.add_trace(go.Scatter(x=data[lower_end:].index, y=data[lower_end:]["EEG1"], mode="lines", marker=dict(color='#1f77b4')), row=1, col=1)
-        fig.add_trace(go.Scatter(x=data[lower_end:].index, y=data[lower_end:]["EEG2"], mode="lines", marker=dict(color='#2ca02c')), row=2, col=1)
+        fig.add_trace(go.Scatter(x=data[lower_end:].index, y=data[lower_end:]["EEG1"].rolling(ss["setup_dict"]["smooth"]).mean().bfill(), mode="lines", marker=dict(color='#1f77b4')), row=1, col=1)
+        fig.add_trace(go.Scatter(x=data[lower_end:].index, y=data[lower_end:]["EEG2"].rolling(ss["setup_dict"]["smooth"]).mean().bfill(), mode="lines", marker=dict(color='#2ca02c')), row=2, col=1)
 
     for idx, annot in st.session_state["annot_df"].iterrows():
         low = bins_dt[st.session_state["bucket_idx"]] - timedelta(seconds=1)
@@ -132,7 +136,8 @@ def build_plot(data, bins, bins_dt):
         if (annot >= low) & (annot <= high):
             fig.add_vline(x=annot)
 
-    fig.update_layout(height=height_slider, showlegend=False, yaxis_range=[-200,200], yaxis2_range=[-200,200])
+    ylow, yhigh = ss["setup_dict"]["y_range"]*-1, ss["setup_dict"]["y_range"]
+    fig.update_layout(height=ss["setup_dict"]["plot_height"], showlegend=False, yaxis_range=[ylow, yhigh], yaxis2_range=[ylow, yhigh])
     #fig.update_layout(hovermode=False)
     fig["layout"]["yaxis"]["title"] = "EEG1"
     fig["layout"]["yaxis2"]["title"] = "EEG2"
@@ -176,9 +181,16 @@ def add_annot():
     st.session_state["annot_select"] = "Select annotation type..."
     return
 
-def slider_change():
+#def slider_change():
+    
+
+def apply_setup():
     if uploaded_file:
-        st.session_state["view_ts"] = bins_dt[st.session_state["bucket_idx"]]
+        ss["view_ts"] = bins_dt[ss["bucket_idx"]]
+    ss["setup_dict"]["strip_len"] = strip_len
+    ss["setup_dict"]["plot_height"] = height_slider
+    ss["setup_dict"]["y_range"] = y_range
+    ss["setup_dict"]["smooth"] = smooth
 
 def new_upload():
     st.session_state["bucket_idx"] = 0
@@ -197,19 +209,27 @@ annotation_dict = {
 }
 
 #data, bins, bins_dt = generate_random_dataset(4375)
-with st.expander("Setup"):
-    col1, col2 = st.columns(2)
-    with col1:
-        neurologist = st.radio("Select annotating neurologist:", ["VM", "JD"], key="neurologist")
-        strip_len = st.slider("Select length of EEG plot in s:", min_value=5, max_value=60, value=30, step=1, on_change=slider_change)
-        height_slider = st.slider("Select height of EEG Plot:", 250, 900, 450, 10)
-    with col2:
-        uploaded_file = st.file_uploader("Choose a EEG recording file", key="uploader", on_change=new_upload)
+with st.sidebar:
+    st.title('Burst Suppression Annotation Program')
+    neurologist = st.radio("Select annotating neurologist:", ["VM", "JD"], key="neurologist")
+    uploaded_file = st.file_uploader("Choose a EEG recording file", key="uploader", on_change=new_upload)
+    st.markdown("""## Setup options:""")
+    strip_len = st.slider("Select length of EEG plot in s:", min_value=5, max_value=60, value=30, step=1)
+    height_slider = st.slider("Select height of EEG Plot:", 250, 900, 450, 10)
+    y_range = st.radio("Set y-axis range (default ± 200µV):", [50, 100, 150, 200], index=3)
+    smooth = st.slider("Set moving average smoothing:", 1, 6, 1, 1)
+    st.button("Apply changes", key="apply_setup_btn", on_click=apply_setup)
+    st.markdown("""## Artifact types:""")
+    st.markdown("""**Missing data**: No Data.  
+                **Saturation**: Extrem values (+- 187.5 uV) due to manipulation, movement etc.  
+                **Loose channel**: Improbably low variance in the signal due to improperly attached electrode or too noisy signal due to high impedance.""")
+    
+    
 
 if uploaded_file is not None:
     if uploaded_file.name.split(".")[0] == "segments":
-        strip_len = 15
-    data, bins, bins_dt = prep_data(uploaded_file, strip_len)
+        ss["setup_dict"]["strip_len"] = 15
+    data, bins, bins_dt = prep_data(uploaded_file, ss["setup_dict"]["strip_len"])
     
     #Update session state variables
     if st.session_state["bucket_idx"] == len(bins)-1:
@@ -224,19 +244,19 @@ if uploaded_file is not None:
         st.session_state["view_ts"] = None
 
     # Plot Header
-    st.subheader(f"""{uploaded_file.name.split('.')[0]}: Plotted {strip_len}s window ({st.session_state["bucket_idx"]+1}/{len(bins)})""")
+    st.subheader(f"""{uploaded_file.name.split('.')[0]}: Plotted {ss["setup_dict"]["strip_len"]}s window ({st.session_state["bucket_idx"]+1}/{len(bins)})""")
     if st.session_state["max_bucket"] == False:
         st.write(f"""from {bins_dt[st.session_state["bucket_idx"]].strftime("%H:%M:%S")} to {bins_dt[st.session_state["bucket_idx"]+1].strftime("%H:%M:%S")}""")
     else:
         st.write(f"""from {bins_dt[st.session_state["bucket_idx"]].strftime("%H:%M:%S")} to end of record""")
 
 
-    control_logic()
-
     fig = build_plot(data, bins, bins_dt)
 
-    clickedPoint = plotly_events(fig, click_event=True, override_height=height_slider)
-
+    clickedPoint = plotly_events(fig, click_event=True, override_height=ss["setup_dict"]["plot_height"])
+    
+    control_logic()
+    
     col1, col2, col3 = st.columns(3)
     with col1:
         st.text("Begin Index")
@@ -294,10 +314,6 @@ else:
 
 #ss
 
-with st.expander("Artifact types"):
-    st.markdown("""**Missing data**: Flat line or no Data.  
-                **Saturation**: Extrem values (+- 187.5 uV) due to manipulation.  
-                **Loose channel**: Improbably low variance in the signal due to improperly attached electrode.""")
 # Delete a single key-value pair
 #del st.session_state[key]
 
