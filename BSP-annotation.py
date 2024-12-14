@@ -173,12 +173,13 @@ def add_annot():
         st.warning('Begin timestamp lager than end timestamp, please correct', icon="⚠️")
         return
     
-    st.session_state["annot_df"].loc[st.session_state["annot_df"].shape[0]] = [st.session_state["timestamp1"], st.session_state["timestamp2"], annotation_dict[st.session_state["valid_annot"]], st.session_state["valid_annot"], neurologist]
+    st.session_state["annot_df"].loc[st.session_state["annot_df"].shape[0]] = [st.session_state["timestamp1"], st.session_state["timestamp2"], annotation_dict[st.session_state["valid_annot"]], st.session_state["valid_annot"], neurologist, st.session_state["annot_comment"]]
     
     #reset ss vars
     st.session_state["timestamp1"] = None
     st.session_state["timestamp2"] = None
     st.session_state["annot_select"] = "Select annotation type..."
+    st.session_state["annot_comment"] = None
     return
 
 #def slider_change():
@@ -196,7 +197,7 @@ def new_upload():
     st.session_state["bucket_idx"] = 0
     st.session_state["max_bucket"] = False
     st.session_state["bucket_cnt"] = False
-    st.session_state["annot_df"] = pd.DataFrame(data=None, columns=["begin_idx", "end_idx", "annot_id", "annot_txt", "neurologist"])
+    st.session_state["annot_df"] = pd.DataFrame(data=None, columns=["begin_idx", "end_idx", "annot_id", "annot_txt", "neurologist", "comment"])
     st.session_state["timestamp1"] = None
     st.session_state["timestamp2"] = None
     st.session_state["view_ts"] = None
@@ -205,7 +206,8 @@ annotation_dict = {
     "Artifact - Missing data": 0,
     "Artifact - Saturation": 1,
     "Artifact - Loose channel": 2,
-    "Suppression": 3
+    "Suppression": 3,
+    "Other Event": 4
 }
 
 #data, bins, bins_dt = generate_random_dataset(4375)
@@ -272,8 +274,10 @@ if uploaded_file is not None:
         annot_type= st.radio("Select type of annotation:", 
                                 optionslist, key="annot_select",
                                 index=0) #, placeholder="Select annotation type...",
+        annot_comment = st.text_input("Comment (Other Event) annotation:", key="annot_comment")
     with col3:
-        streamlit_shortcuts.button("add Annotation", shortcut="Enter", on_click=add_annot)
+        st.button("Add Annotation", key="add_annot_bn", on_click=add_annot, use_container_width=True)
+        #streamlit_shortcuts.button("add Annotation", shortcut="Enter", on_click=add_annot)
 
     with st.expander("Annotations"):
         col1, col2 = st.columns(2)
