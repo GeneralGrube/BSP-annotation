@@ -3,11 +3,13 @@ import streamlit_hotkeys as hotkeys
 from streamlit import session_state as ss
 import pandas as pd
 import numpy as np
+import json
 
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from datetime import datetime as dt
 from datetime import timedelta 
+
 
 st.set_page_config(layout="wide")
 
@@ -187,6 +189,7 @@ def build_plot(data, bins, bins_dt):
                       margin=dict(l=20, r=20, t=0, b=0))
     #fig.update_layout(hovermode=False)
     fig.update_traces(marker=dict(size=0.01))
+    fig.update_xaxes(showgrid=True, tickformat="%M:%S", dtick=1000) #, tickformat="%m:%S",  gridcolor='LightGray', , zerolinecolor='LightGray', minor=dict(showgrid=True), 
     fig["layout"]["yaxis"]["title"] = "EEG1"
     fig["layout"]["yaxis2"]["title"] = "EEG2"
     return fig
@@ -257,21 +260,41 @@ def delete_last_annot():
     else:
         st.warning('No annotations to delete.', icon="⚠️")
 
+def import_setup(setup_import):
+    st.session_state["setup_dict"] = json.load(setup_import)
+    ss.strip_len = ss.setup_dict["strip_len"]
+    ss.plot_height = ss.setup_dict["plot_height"]
+    ss.y_range = ss.setup_dict["y_range"]
+    ss.smooth = ss.setup_dict["smooth"]   
+
+def import_annotation(annot_import):
+    ss.annot_df = pd.read_csv(annot_import, parse_dates=["begin_idx", "end_idx"], usecols=["begin_idx", "end_idx", "trace", "annot_id", "annot_txt", "neurologist", "comment"])
+
 #data, bins, bins_dt = generate_random_dataset(4375)
 with st.sidebar:
     st.title('Burst Suppression Annotation Program')
     neurologist = st.radio("Select annotating neurologist:", ["LM", "KE", "JD"], key="neurologist", horizontal=True)
     uploaded_file = st.file_uploader("Choose a EEG recording file", key="uploader", on_change=new_upload)
+    st.divider()
     st.markdown("""## Setup options:""")
-    strip_len = st.slider("Select length of EEG plot in s:", min_value=5, max_value=60, value=30, step=1)
-    height_slider = st.slider("Select height of EEG Plot:", 250, 900, 450, 10)
-    y_range = st.radio("Set y-axis range (default ± 200µV):", [50, 100, 150, 200], index=3)
-    smooth = st.slider("Set moving average smoothing:", 1, 6, 1, 1)
-    st.button("Apply changes", key="apply_setup_btn", on_click=apply_setup)
+    strip_len = st.slider("Select length of EEG plot in s:", key="strip_len", min_value=5, max_value=60, value=30, step=1)
+    height_slider = st.slider("Select height of EEG Plot:", key="plot_height", min_value=250, max_value=900, value=450, step=10)
+    y_range = st.radio("Set y-axis range (default ± 200µV):", [50, 100, 150, 200], key="y_range", index=3)
+    smooth = st.slider("Set moving average smoothing:", 1, 6, 1, 1, key="smooth")
+    st.button("Apply changes", key="apply_setup_btn", on_click=apply_setup, use_container_width=True)
+    st.divider()
+    st.markdown("""## Setup Import/Export:""")
+    st.download_button("Export Setup", data=json.dumps(st.session_state["setup_dict"]), 
+                           file_name=f"BSP-annotation_setup_{neurologist}.json", use_container_width=True)
+    setup_import = st.file_uploader("Import Setup", key="setup_import", type=["json"])
+    st.button("Import Setup", key="import_setup_btn", on_click=import_setup, args=(setup_import,), use_container_width=True)
+    st.divider()
     st.markdown("""## Artifact types:""")
     st.markdown("""**Missing data**: No Data.  
                 **Saturation**: Extrem values (+- 187.5 uV) due to manipulation, movement etc.  
                 **Loose channel**: Improbably low variance in the signal due to improperly attached electrode or too noisy signal due to high impedance.""")
+    
+    
 
 def header_logic():
     st.subheader(f"""{uploaded_file.name.split('.')[0]}: Plotted {ss["setup_dict"]["strip_len"]}s window ({st.session_state["bucket_idx"]+1}/{len(bins)})""")
@@ -322,9 +345,13 @@ def annotation_logic():
         with col1:
             st.write(st.session_state["annot_df"])
         with col2:
-            st.download_button("Download Annotations", data=st.session_state["annot_df"].to_csv(), 
+            st.download_button("**Download Annotations**", data=st.session_state["annot_df"].to_csv(), 
                            file_name=f"{uploaded_file.name.split('.')[0]}_annot_{neurologist}.csv", use_container_width=True)
+            st.divider()
             st.button("Delete last Annotation", on_click=delete_last_annot, use_container_width=True)
+            st.divider()
+            annot_import = st.file_uploader("Import Annotations", key="annot_import", type=["csv"])
+            st.button("Import Annotations", key="import_annot_btn", on_click=import_annotation, args=(annot_import,), use_container_width=True)
 
 if uploaded_file is not None:
     if uploaded_file.name.split(".")[0] == "segments":
