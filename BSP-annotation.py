@@ -9,9 +9,6 @@ import time
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from datetime import datetime as dt
-from datetime import timedelta 
-
-import gc
 
 st.set_page_config(layout="wide")
 
