@@ -4,7 +4,8 @@ from streamlit import session_state as ss
 import pandas as pd
 import numpy as np
 import json
-import time
+
+from streamlit_plotly_events import plotly_events
 
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -20,6 +21,7 @@ annotation_dict = {
     "Other Event": 4
 }
 
+#Initialize session state variables
 if "bucket_idx" not in ss:
     ss["bucket_idx"] = 0
 if "max_bucket" not in ss:
@@ -43,10 +45,6 @@ if "setup_dict" not in ss:
         "y_range": 200,
         "smooth": 1
     }
-if "click_counter" not in ss:
-    ss["click_counter"] = 0
-else:
-    ss["click_counter"] += 1
 
 @st.cache_data
 def generate_random_dataset(n):
@@ -151,11 +149,12 @@ def build_overview(data, bins):
     fig.add_vrect(x0=x0, x1=x1, line_width=3, fillcolor="black", opacity=0.3)                 
     return fig
 
-def build_plot(data, bins, bins_dt):
+@st.cache_data
+def base_plot(data, bins, bucket_idx):
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0)
 
     # compute window bounds once (datetime-like)
-    lower_end = bins[st.session_state["bucket_idx"]] - pd.to_timedelta(1, unit='s')
+    lower_end = bins[bucket_idx] - pd.to_timedelta(1, unit='s')
     if st.session_state["max_bucket"] == False:
         higher_end = bins[(st.session_state["bucket_idx"] + 1)] + pd.to_timedelta(1, unit='s')
     else:
@@ -169,16 +168,20 @@ def build_plot(data, bins, bins_dt):
 
     window_slice = slice(start_pos, end_pos + 1)
     window_index = data.index[window_slice]
-    eeg1_win = data_s["EEG1"].values[window_slice]
-    eeg2_win = data_s["EEG2"].values[window_slice]
+    eeg1_win = list(data_s["EEG1"].values[window_slice])
+    eeg2_win = list(data_s["EEG2"].values[window_slice])
 
     xs = window_index
-    y1 = eeg1_win
-    y2 = eeg2_win
 
     # add traces
-    fig.add_trace(go.Scatter(x=xs, y=y1, mode="lines+markers", line=dict(color='#1f77b4')), row=1, col=1)
-    fig.add_trace(go.Scatter(x=xs, y=y2, mode="lines+markers", line=dict(color='#2ca02c')), row=2, col=1)
+    fig.add_trace(go.Scatter(x=xs, y=eeg1_win, mode="lines", line=dict(color='#1f77b4')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=xs, y=eeg2_win, mode="lines", line=dict(color='#2ca02c')), row=2, col=1) #"lines+markers"
+
+    return fig, lower_end, higher_end
+
+def build_plot(data, bins, bucket_idx):
+    
+    fig, lower_end, higher_end = base_plot(data, bins, bucket_idx)
 
     # vectorized annotation selection (faster than iterrows over whole df)
     if not st.session_state["annot_df"].empty:
@@ -218,9 +221,9 @@ def build_plot(data, bins, bins_dt):
                       showlegend=False,
                       yaxis_range=[ylow, yhigh],
                       yaxis2_range=[ylow, yhigh],
-                      margin=dict(l=20, r=20, t=0, b=0))
-    fig.update_traces(marker=dict(size=0.01))  # markers tiny if present
-    fig.update_xaxes(showgrid=True, tickformat="%M:%S", dtick=1000)
+                      margin=dict(l=50, r=20, t=20, b=30))
+    #fig.update_traces(marker=dict(size=0.01))  # markers tiny if present
+    fig.update_xaxes(showgrid=True, tickformat="%S", dtick=1000)
     fig["layout"]["yaxis"]["title"] = "EEG1"
     fig["layout"]["yaxis2"]["title"] = "EEG2"
     return fig
@@ -264,9 +267,6 @@ def add_annot(trace_select: str):
     st.session_state["annot_select"] = "Select annotation type..."
     st.session_state["annot_comment"] = None
     return
-
-#def slider_change():
-    
 
 def apply_setup():
     if uploaded_file:
@@ -403,8 +403,6 @@ if uploaded_file is not None:
 
     
     # Plot Header
-    if ss["click_counter"] % 100 == 0:
-        st.warning(f"Remember to save your work periodically! Click count: {ss['click_counter']}", icon="⚠️")
     header_logic()
     PlotPlaceholder = st.empty()
     OverviewPlaceholder = st.empty()
@@ -412,13 +410,19 @@ if uploaded_file is not None:
     annotation_logic()
 
 
-    fig = build_plot(data_s, bins, bins_dt)
+    fig = build_plot(data_s, bins, st.session_state["bucket_idx"])
 
-    def point_clicked():
-        point = ss.click_data["selection"]["points"][0]
-        x = point["x"]
-        curve = point["curve_number"]
-        ts = dt.strptime(x, "%Y-%m-%d %H:%M:%S.%f")
+    with PlotPlaceholder.container():
+        clickedPoint = plotly_events(fig, click_event=True, override_height=ss["setup_dict"]["plot_height"]) #
+        #st.plotly_chart(fig, use_container_width=True, on_select=point_clicked, key="click_data", config = {'displayModeBar': False} )
+        
+    
+    with OverviewPlaceholder.container():
+        st.plotly_chart(build_overview(data, bins), use_container_width=True, key="overview", config = {'staticPlot': True} )
+        
+    if clickedPoint:
+        curve = clickedPoint[0]["curveNumber"]
+        ts = dt.strptime(clickedPoint[0]["x"], "%Y-%m-%d %H:%M:%S.%f")
         valid_annot = get_annot()
         st.session_state["valid_annot"] = valid_annot
         if not st.session_state["timestamp1"]: #first click in plot
@@ -434,15 +438,5 @@ if uploaded_file is not None:
         
         elif st.session_state["timestamp1"] and valid_annot and st.session_state["timestamp2"]:
             st.session_state["timestamp2"] = ts
-
-    with PlotPlaceholder.container():
-        st.plotly_chart(fig, use_container_width=True, on_select=point_clicked, key="click_data", config = {'displayModeBar': False} )
-    
-    with OverviewPlaceholder.container():
-        st.plotly_chart(build_overview(data, bins), use_container_width=True, key="overview", config = {'staticPlot': True} )
-        
-
 else:
     st.write("Please upload file to start annotating!")
-
-
