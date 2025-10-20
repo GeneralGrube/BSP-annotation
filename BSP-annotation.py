@@ -134,7 +134,6 @@ if hotkeys.pressed("next"):
 
 @st.cache_data
 def build_overview_base(data):
-    time.sleep(5)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=data[::20].index, y=data["EEG1"][::20]+50, mode="lines", marker=dict(color='#1f77b4')))
     fig.add_trace(go.Scatter(x=data[::20].index, y=data["EEG2"][::20]-50, mode="lines", marker=dict(color='#2ca02c')))
@@ -445,4 +444,5 @@ if uploaded_file is not None:
 
 else:
     st.write("Please upload file to start annotating!")
+
 
