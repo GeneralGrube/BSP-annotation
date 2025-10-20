@@ -4,12 +4,14 @@ from streamlit import session_state as ss
 import pandas as pd
 import numpy as np
 import json
+import time
 
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from datetime import datetime as dt
 from datetime import timedelta 
 
+import gc
 
 st.set_page_config(layout="wide")
 
@@ -44,6 +46,10 @@ if "setup_dict" not in ss:
         "y_range": 200,
         "smooth": 1
     }
+if "click_counter" not in ss:
+    ss["click_counter"] = 0
+else:
+    ss["click_counter"] += 1
 
 @st.cache_data
 def generate_random_dataset(n):
@@ -65,7 +71,16 @@ def prep_data(uploaded_file, strip_len):
     bins_dt = [x.to_pydatetime() for x in bins]
     #st.write(df)
     return df, bins, bins_dt
-    
+
+@st.cache_data
+def get_smoothed(data: pd.DataFrame, smooth: int) -> pd.DataFrame:
+    """Return cached smoothed EEG columns to avoid recalculating rolling mean on every plot render."""
+    # compute only the two series we need and return new DataFrame (cached by streamlit)
+    return pd.DataFrame({
+        "EEG1": data["EEG1"].rolling(smooth).mean().bfill(),
+        "EEG2": data["EEG2"].rolling(smooth).mean().bfill()
+    }, index=data.index)
+
 def change_bucket_idx(max_bin, offset):
     if offset == "first":
         st.session_state["bucket_idx"] = 0
@@ -96,6 +111,7 @@ def inc_bucket_idx():
         st.warning('Max bucket count reached. Cannot incement further.', icon="⚠️")
     else:
         st.session_state["bucket_idx"] += 1
+
 def dec_bucket_idx():
     if st.session_state["bucket_idx"] == 0:
         st.warning('Min bucket count reached. Cannot decrement further.', icon="⚠️")
@@ -119,7 +135,9 @@ if hotkeys.pressed("previous"):
 if hotkeys.pressed("next"):
     inc_bucket_idx()
 
+@st.cache_data
 def build_overview_base(data):
+    time.sleep(5)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=data[::20].index, y=data["EEG1"][::20]+50, mode="lines", marker=dict(color='#1f77b4')))
     fig.add_trace(go.Scatter(x=data[::20].index, y=data["EEG2"][::20]-50, mode="lines", marker=dict(color='#2ca02c')))
@@ -139,57 +157,74 @@ def build_overview(data, bins):
 
 def build_plot(data, bins, bins_dt):
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0)
-    lower_end = bins[st.session_state["bucket_idx"]]  - pd.to_timedelta(1, unit='s')
+
+    # compute window bounds once (datetime-like)
+    lower_end = bins[st.session_state["bucket_idx"]] - pd.to_timedelta(1, unit='s')
     if st.session_state["max_bucket"] == False:
-        higher_end = bins[(st.session_state["bucket_idx"]+1)] + pd.to_timedelta(1, unit='s')
-        fig.add_trace(go.Scatter(x=data[lower_end:higher_end].index, y=data[lower_end:higher_end]["EEG1"].rolling(ss["setup_dict"]["smooth"]).mean().bfill(), mode="lines+markers", marker=dict(color='#1f77b4')), row=1, col=1)
-        fig.add_trace(go.Scatter(x=data[lower_end:higher_end].index, y=data[lower_end:higher_end]["EEG2"].rolling(ss["setup_dict"]["smooth"]).mean().bfill(), mode="lines+markers", marker=dict(color='#2ca02c')), row=2, col=1)
-
+        higher_end = bins[(st.session_state["bucket_idx"] + 1)] + pd.to_timedelta(1, unit='s')
     else:
-        fig.add_trace(go.Scatter(x=data[lower_end:].index, y=data[lower_end:]["EEG1"].rolling(ss["setup_dict"]["smooth"]).mean().bfill(), mode="lines+markers", marker=dict(color='#1f77b4')), row=1, col=1)
-        fig.add_trace(go.Scatter(x=data[lower_end:].index, y=data[lower_end:]["EEG2"].rolling(ss["setup_dict"]["smooth"]).mean().bfill(), mode="lines+markers", marker=dict(color='#2ca02c')), row=2, col=1)
+        higher_end = None  # means to end
 
-    # add annotations
-    for idx, annot in st.session_state["annot_df"].iterrows():
-        low = bins_dt[st.session_state["bucket_idx"]] - timedelta(seconds=1)
-        if st.session_state["max_bucket"] == False:
-            high = bins_dt[st.session_state["bucket_idx"]+1] + timedelta(seconds=1)
-        else:
-            high = data.index[-1]
-        if (annot.iloc[0] >= low) & (annot.iloc[0] <= high):
-            if annot.iloc[2] == 3:
-                fig.add_vrect(x0=annot.iloc[0], x1=annot.iloc[1], line_width=0, fillcolor="red", opacity=0.2)
-                fig.add_annotation(x=annot.iloc[0], y=-20, text=annot.iloc[4], showarrow=False)
+    # get integer slice positions (faster than label slicing)
+    start_pos = data.index.searchsorted(lower_end)
+    end_pos = data.index.searchsorted(higher_end) if higher_end is not None else len(data) - 1
+    if end_pos < start_pos:
+        end_pos = start_pos
+
+    window_slice = slice(start_pos, end_pos + 1)
+    window_index = data.index[window_slice]
+    eeg1_win = data_s["EEG1"].values[window_slice]
+    eeg2_win = data_s["EEG2"].values[window_slice]
+
+    xs = window_index
+    y1 = eeg1_win
+    y2 = eeg2_win
+
+    # add traces
+    fig.add_trace(go.Scatter(x=xs, y=y1, mode="lines+markers", line=dict(color='#1f77b4')), row=1, col=1)
+    fig.add_trace(go.Scatter(x=xs, y=y2, mode="lines+markers", line=dict(color='#2ca02c')), row=2, col=1)
+
+    # vectorized annotation selection (faster than iterrows over whole df)
+    if not st.session_state["annot_df"].empty:
+        adf = st.session_state["annot_df"]
+        # ensure begin_idx/end_idx are datetimes
+        # build mask for annotations that overlap window (begin within window)
+        mask = (adf["begin_idx"] >= lower_end) & (adf["begin_idx"] <= (higher_end if higher_end is not None else data.index[-1]))
+        for annot in adf.loc[mask].itertuples(index=False):
+            # access by column names in tuple order: begin_idx, end_idx, trace, annot_id, annot_txt, neurologist, comment
+            a_begin, a_end, a_trace, a_id, a_txt, _, _ = annot
+            if a_trace == 3:
+                fig.add_vrect(x0=a_begin, x1=a_end, line_width=0, fillcolor="red", opacity=0.2)
+                fig.add_annotation(x=a_begin, y=-20, text=a_txt, showarrow=False)
             else:
-                fig.add_vrect(x0=annot.iloc[0], x1=annot.iloc[1], line_width=0, fillcolor="red", opacity=0.2, row=annot.iloc[2])
-                fig.add_annotation(x=annot.iloc[0], y=-20, text=annot.iloc[4], showarrow=False, row=annot.iloc[2], col=1)
+                # row index: trace 1 -> row=1, trace 2 -> row=2
+                row_idx = int(a_trace) if a_trace in (1, 2) else 1
+                fig.add_vrect(x0=a_begin, x1=a_end, line_width=0, fillcolor="red", opacity=0.2, row=row_idx)
+                fig.add_annotation(x=a_begin, y=-20, text=a_txt, showarrow=False, row=row_idx, col=1)
 
-    # plot currect annotation
+    # plot current annotation timestamps if inside window
     curr_annot = []
     if st.session_state["timestamp1"]:
         curr_annot.append(st.session_state["timestamp1"])
     if st.session_state["timestamp2"]:
         curr_annot.append(st.session_state["timestamp2"])
 
-    for annot in curr_annot:
-        #only plot if within currect window
-        low = bins_dt[st.session_state["bucket_idx"]] - timedelta(seconds=1)
-        if st.session_state["max_bucket"] == False:
-            high = bins_dt[st.session_state["bucket_idx"]+1] + timedelta(seconds=1)
-        else:
-            high = data.index[-1]
-        if (annot >= low) & (annot <= high):
-            fig.add_vline(x=annot, row=ss.ts1_curve+1)
+    for annot_ts in curr_annot:
+        if annot_ts is None:
+            continue
+        if (annot_ts >= lower_end) and (higher_end is None or annot_ts <= higher_end):
+            # ts1_curve stored as 0-based curve index, add 1 for subplot row
+            row_for_vline = (ss.ts1_curve + 1) if ss.ts1_curve is not None else 1
+            fig.add_vline(x=annot_ts, row=row_for_vline)
 
-    ylow, yhigh = ss["setup_dict"]["y_range"]*-1, ss["setup_dict"]["y_range"]
-    fig.update_layout(height=ss["setup_dict"]["plot_height"], 
-                      showlegend=False, 
-                      yaxis_range=[ylow, yhigh], 
+    ylow, yhigh = ss["setup_dict"]["y_range"] * -1, ss["setup_dict"]["y_range"]
+    fig.update_layout(height=ss["setup_dict"]["plot_height"],
+                      showlegend=False,
+                      yaxis_range=[ylow, yhigh],
                       yaxis2_range=[ylow, yhigh],
                       margin=dict(l=20, r=20, t=0, b=0))
-    #fig.update_layout(hovermode=False)
-    fig.update_traces(marker=dict(size=0.01))
-    fig.update_xaxes(showgrid=True, tickformat="%M:%S", dtick=1000) #, tickformat="%m:%S",  gridcolor='LightGray', , zerolinecolor='LightGray', minor=dict(showgrid=True), 
+    fig.update_traces(marker=dict(size=0.01))  # markers tiny if present
+    fig.update_xaxes(showgrid=True, tickformat="%M:%S", dtick=1000)
     fig["layout"]["yaxis"]["title"] = "EEG1"
     fig["layout"]["yaxis2"]["title"] = "EEG2"
     return fig
@@ -357,7 +392,8 @@ if uploaded_file is not None:
     if uploaded_file.name.split(".")[0] == "segments":
         ss["setup_dict"]["strip_len"] = 15
     data, bins, bins_dt = prep_data(uploaded_file, ss["setup_dict"]["strip_len"])
-    
+    data_s = get_smoothed(data, ss["setup_dict"]["smooth"])
+
     #Update session state variables
     if st.session_state["bucket_idx"] == len(bins)-1:
         st.session_state["max_bucket"] = True
@@ -371,6 +407,8 @@ if uploaded_file is not None:
 
     
     # Plot Header
+    if ss["click_counter"] % 100 == 0:
+        st.warning(f"Remember to save your work periodically! Click count: {ss['click_counter']}", icon="⚠️")
     header_logic()
     PlotPlaceholder = st.empty()
     OverviewPlaceholder = st.empty()
@@ -378,7 +416,7 @@ if uploaded_file is not None:
     annotation_logic()
 
 
-    fig = build_plot(data, bins, bins_dt)
+    fig = build_plot(data_s, bins, bins_dt)
 
     def point_clicked():
         point = ss.click_data["selection"]["points"][0]
@@ -406,7 +444,7 @@ if uploaded_file is not None:
     
     with OverviewPlaceholder.container():
         st.plotly_chart(build_overview(data, bins), use_container_width=True, key="overview", config = {'staticPlot': True} )
-    
+        
 
 else:
     st.write("Please upload file to start annotating!")
