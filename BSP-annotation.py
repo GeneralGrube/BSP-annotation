@@ -47,8 +47,6 @@ if "setup_dict" not in ss:
         "smooth": 1
     }
 
-clickedPoint = None
-
 @st.cache_data
 def generate_random_dataset(n):
     rand_data = 5 * np.random.randn(n, 2)
@@ -415,27 +413,30 @@ if uploaded_file is not None:
 
     fig = build_plot(data_s, bins, st.session_state["bucket_idx"])
 
-    if clickedPoint:
-        curve = clickedPoint[0]["curveNumber"]
-        ts = dt.strptime(clickedPoint[0]["x"], "%Y-%m-%d %H:%M:%S.%f")
-        valid_annot = get_annot()
-        st.session_state["valid_annot"] = valid_annot
-        import os
-        os.write(1,b'Klick registered.\n')
-        #print("Klick registered.", ts, curve)
-        if not st.session_state["timestamp1"]: #first click in plot
-            st.session_state["timestamp1"] = ts
-            ss.ts1_curve = curve
+    try:
+        if clickedPoint:
+            curve = clickedPoint[0]["curveNumber"]
+            ts = dt.strptime(clickedPoint[0]["x"], "%Y-%m-%d %H:%M:%S.%f")
+            valid_annot = get_annot()
+            st.session_state["valid_annot"] = valid_annot
+            import os
+            os.write(1,b'Klick registered.\n')
+            #print("Klick registered.", ts, curve)
+            if not st.session_state["timestamp1"]: #first click in plot
+                st.session_state["timestamp1"] = ts
+                ss.ts1_curve = curve
             
-        elif st.session_state["timestamp1"] and not valid_annot:
-            st.session_state["timestamp1"] = ts
-            ss.ts1_curve = curve
+            elif st.session_state["timestamp1"] and not valid_annot:
+                st.session_state["timestamp1"] = ts
+                ss.ts1_curve = curve
         
-        elif st.session_state["timestamp1"] and valid_annot and not st.session_state["timestamp2"]: #subsequent clicks in plot != previous point
-            st.session_state["timestamp2"] = ts
+            elif st.session_state["timestamp1"] and valid_annot and not st.session_state["timestamp2"]: #subsequent clicks in plot != previous point
+                st.session_state["timestamp2"] = ts
         
-        elif st.session_state["timestamp1"] and valid_annot and st.session_state["timestamp2"]:
-            st.session_state["timestamp2"] = ts
+            elif st.session_state["timestamp1"] and valid_annot and st.session_state["timestamp2"]:
+                st.session_state["timestamp2"] = ts
+    except NameError:
+        pass
     
     with PlotPlaceholder.container():
         clickedPoint = plotly_events(fig, click_event=True, override_height=ss["setup_dict"]["plot_height"]) #
@@ -448,6 +449,7 @@ if uploaded_file is not None:
    
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
