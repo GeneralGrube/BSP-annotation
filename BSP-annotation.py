@@ -277,6 +277,7 @@ def add_annot(trace_select: str):
     st.session_state["timestamp2"] = None
     st.session_state["annot_select"] = "Select annotation type..."
     st.session_state["annot_comment"] = None
+    ss["redraw_fig"] = True
     return
 
 def apply_setup():
@@ -465,6 +466,7 @@ if uploaded_file is not None:
 
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
