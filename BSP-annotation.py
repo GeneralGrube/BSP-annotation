@@ -47,6 +47,8 @@ if "setup_dict" not in ss:
         "smooth": 1
     }
 
+clickedPoint = None
+
 @st.cache_data
 def generate_random_dataset(n):
     rand_data = 5 * np.random.randn(n, 2)
@@ -446,6 +448,7 @@ if uploaded_file is not None:
    
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
