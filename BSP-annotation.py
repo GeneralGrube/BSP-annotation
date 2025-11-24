@@ -439,8 +439,8 @@ if uploaded_file is not None:
         ts = dt.strptime(clickedPoint[0]["x"], "%Y-%m-%d %H:%M:%S.%f")
         valid_annot = get_annot()
         st.session_state["valid_annot"] = valid_annot
-        import os
-        os.write(1,b'Klick registered.\n')
+        #import os
+        #os.write(1,b'Klick registered.\n')
         #print("Klick registered.", ts, curve)
         if not st.session_state["timestamp1"]: #first click in plot
             st.session_state["timestamp1"] = ts
@@ -466,6 +466,7 @@ if uploaded_file is not None:
 
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
