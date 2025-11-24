@@ -46,6 +46,10 @@ if "setup_dict" not in ss:
         "y_range": 200,
         "smooth": 1
     }
+if "fig" not in ss:
+    ss["fig"] = None
+if "redraw_fig" not in ss:
+    ss["redraw_fig"] = True
 
 @st.cache_data
 def generate_random_dataset(n):
@@ -78,6 +82,7 @@ def get_smoothed(data: pd.DataFrame, smooth: int) -> pd.DataFrame:
     }, index=data.index)
 
 def change_bucket_idx(max_bin, offset):
+    ss["redraw_fig"] = True
     if offset == "first":
         st.session_state["bucket_idx"] = 0
     elif offset == "last":
@@ -107,12 +112,14 @@ def inc_bucket_idx():
         st.warning('Max bucket count reached. Cannot incement further.', icon="⚠️")
     else:
         st.session_state["bucket_idx"] += 1
+        ss["redraw_fig"] = True
 
 def dec_bucket_idx():
     if st.session_state["bucket_idx"] == 0:
         st.warning('Min bucket count reached. Cannot decrement further.', icon="⚠️")
     else:
         st.session_state["bucket_idx"] -= 1
+        ss["redraw_fig"] = True
 
 def get_annot():
     if not st.session_state["annot_select"] or st.session_state["annot_select"] == "Select annotation type...":
@@ -276,6 +283,7 @@ def apply_setup():
     ss["setup_dict"]["plot_height"] = height_slider
     ss["setup_dict"]["y_range"] = y_range
     ss["setup_dict"]["smooth"] = smooth
+    ss["redraw_fig"] = True
 
 def new_upload():
     st.session_state["bucket_idx"] = 0
@@ -287,6 +295,7 @@ def new_upload():
     st.session_state["view_ts"] = None
 
 def delete_last_annot():
+    ss["redraw_fig"] = True
     if not st.session_state["annot_df"].empty:
         st.session_state["annot_df"].drop(st.session_state["annot_df"].index[-1], inplace=True)
     else:
@@ -408,11 +417,12 @@ if uploaded_file is not None:
     control_logic()
     annotation_logic()
 
-
-    fig = build_plot(data_s, bins, st.session_state["bucket_idx"])
+    if ss["redraw_fig"]:
+        ss["fig"] = build_plot(data_s, bins, st.session_state["bucket_idx"])
+        ss["redraw_fig"] = False
     
     with PlotPlaceholder.container():
-        clickedPoint = plotly_events(fig, click_event=True, override_height=ss["setup_dict"]["plot_height"]) #
+        clickedPoint = plotly_events(ss["fig"], click_event=True, override_height=ss["setup_dict"]["plot_height"]) #
         #st.plotly_chart(fig, use_container_width=True, on_select=point_clicked, key="click_data", config = {'displayModeBar': False} )
         
     
@@ -441,9 +451,9 @@ if uploaded_file is not None:
         elif st.session_state["timestamp1"] and valid_annot and st.session_state["timestamp2"]:
             st.session_state["timestamp2"] = ts
 
-        fig = build_plot(data_s, bins, st.session_state["bucket_idx"])
+        ss["fig"] = build_plot(data_s, bins, st.session_state["bucket_idx"])
         with PlotPlaceholder.container():
-            clickedPoint = plotly_events(fig, click_event=True, override_height=ss["setup_dict"]["plot_height"])
+            clickedPoint = plotly_events(ss["fig"], click_event=True, override_height=ss["setup_dict"]["plot_height"])
         if st.session_state["timestamp1"]:
             begin_idx_ph.write(st.session_state["timestamp1"])
         if st.session_state["timestamp2"]:
@@ -451,6 +461,7 @@ if uploaded_file is not None:
 
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
