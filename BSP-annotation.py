@@ -413,15 +413,7 @@ if uploaded_file is not None:
 
     fig = build_plot(data_s, bins, st.session_state["bucket_idx"])
 
-    with PlotPlaceholder.container():
-        clickedPoint = plotly_events(fig, click_event=True, override_height=ss["setup_dict"]["plot_height"]) #
-        #st.plotly_chart(fig, use_container_width=True, on_select=point_clicked, key="click_data", config = {'displayModeBar': False} )
-        
-    
-    with OverviewPlaceholder.container():
-        st.plotly_chart(build_overview(data, bins), use_container_width=True, key="overview", config = {'staticPlot': True} )
-        
-    if clickedPoint:
+     if clickedPoint:
         curve = clickedPoint[0]["curveNumber"]
         ts = dt.strptime(clickedPoint[0]["x"], "%Y-%m-%d %H:%M:%S.%f")
         valid_annot = get_annot()
@@ -442,8 +434,19 @@ if uploaded_file is not None:
         
         elif st.session_state["timestamp1"] and valid_annot and st.session_state["timestamp2"]:
             st.session_state["timestamp2"] = ts
+    
+    with PlotPlaceholder.container():
+        clickedPoint = plotly_events(fig, click_event=True, override_height=ss["setup_dict"]["plot_height"]) #
+        #st.plotly_chart(fig, use_container_width=True, on_select=point_clicked, key="click_data", config = {'displayModeBar': False} )
+        
+    
+    with OverviewPlaceholder.container():
+        st.plotly_chart(build_overview(data, bins), use_container_width=True, key="overview", config = {'staticPlot': True} )
+        
+   
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
