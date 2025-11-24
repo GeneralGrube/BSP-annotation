@@ -413,7 +413,7 @@ if uploaded_file is not None:
 
     fig = build_plot(data_s, bins, st.session_state["bucket_idx"])
 
-     if clickedPoint:
+    if clickedPoint:
         curve = clickedPoint[0]["curveNumber"]
         ts = dt.strptime(clickedPoint[0]["x"], "%Y-%m-%d %H:%M:%S.%f")
         valid_annot = get_annot()
@@ -446,6 +446,7 @@ if uploaded_file is not None:
    
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
