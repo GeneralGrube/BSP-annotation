@@ -48,8 +48,11 @@ if "setup_dict" not in ss:
     }
 if "fig" not in ss:
     ss["fig"] = None
+if ss["overview"] not in ss:
+    ss["overview"] = None
 if "redraw_fig" not in ss:
     ss["redraw_fig"] = True
+
 
 @st.cache_data
 def generate_random_dataset(n):
@@ -419,6 +422,7 @@ if uploaded_file is not None:
 
     if ss["redraw_fig"]:
         ss["fig"] = build_plot(data_s, bins, st.session_state["bucket_idx"])
+        ss["overview"] = build_overview(data, bins)
         ss["redraw_fig"] = False
     
     with PlotPlaceholder.container():
@@ -427,7 +431,7 @@ if uploaded_file is not None:
         
     
     with OverviewPlaceholder.container():
-        st.plotly_chart(build_overview(data, bins), use_container_width=True, key="overview", config = {'staticPlot': True} )
+        st.plotly_chart(ss["overview"], use_container_width=True, key="overview", config = {'staticPlot': True} )
         
     if clickedPoint:
         curve = clickedPoint[0]["curveNumber"]
@@ -461,6 +465,7 @@ if uploaded_file is not None:
 
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
