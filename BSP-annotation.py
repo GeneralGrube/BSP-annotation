@@ -18,6 +18,7 @@ annotation_dict = {
     #"Artifact - Saturation": 1,
     "Artifact - Loose channel": 2,
     "Suppression": 3,
+    "50 Hz artifact": 5,
     "Other Event": 4
 }
 
@@ -440,3 +441,4 @@ if uploaded_file is not None:
             st.session_state["timestamp2"] = ts
 else:
     st.write("Please upload file to start annotating!")
+
