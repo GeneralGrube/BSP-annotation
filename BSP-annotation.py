@@ -48,7 +48,7 @@ if "setup_dict" not in ss:
     }
 if "fig" not in ss:
     ss["fig"] = None
-if ss["overview"] not in ss:
+if "overview" not in ss:
     ss["overview"] = None
 if "redraw_fig" not in ss:
     ss["redraw_fig"] = True
@@ -465,6 +465,7 @@ if uploaded_file is not None:
 
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
