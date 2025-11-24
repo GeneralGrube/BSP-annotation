@@ -355,12 +355,9 @@ def annotation_logic():
     with col1:
         st.text("Begin Index")
         begin_idx = st.empty()
-        if st.session_state["timestamp1"]:
-            begin_idx.write(st.session_state["timestamp1"])
         st.text("End Index")
         end_idx = st.empty()
-        if st.session_state["timestamp2"]:
-            end_idx.write(st.session_state["timestamp2"])
+        
     with col2:
         optionslist = ["Select annotation type..."] + list(annotation_dict.keys())
         annot_type= st.radio("Select type of annotation:", 
@@ -446,9 +443,14 @@ if uploaded_file is not None:
         fig = build_plot(data_s, bins, st.session_state["bucket_idx"])
         with PlotPlaceholder.container():
             clickedPoint = plotly_events(fig, click_event=True, override_height=ss["setup_dict"]["plot_height"])
+        if st.session_state["timestamp1"]:
+            begin_idx.write(st.session_state["timestamp1"])
+        if st.session_state["timestamp2"]:
+            end_idx.write(st.session_state["timestamp2"])
 
 else:
     st.write("Please upload file to start annotating!")
+
 
 
 
